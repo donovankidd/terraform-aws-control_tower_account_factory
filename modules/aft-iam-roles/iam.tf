@@ -13,6 +13,8 @@ resource "aws_iam_role" "aft_admin_role" {
     terraform_project_name               = var.terraform_project_name
     terraform_oidc_aws_audience          = var.terraform_oidc_aws_audience
     terraform_oidc_hostname              = var.terraform_oidc_hostname
+    enable_spacelift                     = var.spacelift_enabled
+    spacelift_trust_statement            = local.spacelift_trust_statement
   })
 }
 

@@ -26,5 +26,9 @@
       }
     }
     %{ endif }
+
+    %{ if enable_spacelift }
+    ,${spacelift_trust_statement}
+    %{ endif }
   ]
 }
