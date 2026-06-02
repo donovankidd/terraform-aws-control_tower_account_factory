@@ -138,7 +138,14 @@ def ensure_vcs_and_stack_exists(
     Create or get Spacelift VCS repo, commit Terraform files to it, and create stack.
     Returns (vcs_id, stack_id, commit_sha).
     """
-    vcs_id = spacelift.get_vcs_by_name(vcs_name, space_id)
+    # Check by ID first (Spacelift uses name as ID on first creation, so this
+    # avoids a stale name-scan that misses the repo and triggers a -2 collision).
+    if spacelift.check_vcs_exists(vcs_name):
+        vcs_id = vcs_name
+        logger.info("VCS repo %s found by ID lookup (space_id=%s)", vcs_name, space_id)
+    else:
+        vcs_id = spacelift.get_vcs_by_name(vcs_name, space_id)
+
     vcs_is_new = False
     if vcs_id:
         logger.info("VCS repo %s already exists with ID %s (space_id=%s)", vcs_name, vcs_id, space_id)
@@ -248,7 +255,7 @@ def trigger_and_wait(stack_id, commit_sha=None, wait_for_vcs=False):
     """
     if wait_for_vcs:
         logger.info("Waiting for VCS-triggered run on stack %s", stack_id)
-        result = spacelift.wait_for_stack_run(stack_id)
+        result = spacelift.wait_for_stack_run(stack_id, commit_sha=commit_sha)
         if result is None:
             logger.error("Timeout waiting for VCS-triggered run on stack %s", stack_id)
             raise Exception("Timeout waiting for VCS-triggered run on stack {}".format(stack_id))

@@ -811,6 +811,9 @@ def get_stack_latest_run(stack_id: str) -> Optional[Dict[str, Any]]:
                 id
                 state
                 createdAt
+                commit {
+                    hash
+                }
             }
         }
     }
@@ -825,6 +828,7 @@ def get_stack_latest_run(stack_id: str) -> Optional[Dict[str, Any]]:
 
 def wait_for_stack_run(
     stack_id: str,
+    commit_sha: Optional[str] = None,
     timeout_seconds: int = 300,
     poll_interval: int = 10,
     terminal_states: Optional[List[str]] = None
@@ -837,6 +841,8 @@ def wait_for_stack_run(
     
     Args:
         stack_id: ID of the stack to monitor
+        commit_sha: If provided, only accept the run triggered by this commit SHA.
+                    Prevents matching a pre-existing finished run.
         timeout_seconds: Maximum seconds to wait for a run to appear
         poll_interval: Seconds to wait between polls
         terminal_states: Optional list of states considered terminal
@@ -859,9 +865,24 @@ def wait_for_stack_run(
         remaining = timeout_seconds - elapsed
         
         if latest_run:
-            run_id = latest_run["id"]
-            current_state = latest_run["state"]
-            logger.info("Found run %s in state %s (elapsed: %ds)", run_id, current_state, elapsed)
+            candidate_id = latest_run["id"]
+            candidate_state = latest_run["state"]
+
+            if commit_sha:
+                run_commit_hash = (latest_run.get("commit") or {}).get("hash", "")
+                if run_commit_hash != commit_sha:
+                    logger.info(
+                        "[%ds] Latest run %s is for commit %s, waiting for run triggered by commit %s",
+                        elapsed, candidate_id,
+                        run_commit_hash[:12] if run_commit_hash else "unknown",
+                        commit_sha[:12],
+                    )
+                    time.sleep(poll_interval)
+                    elapsed = int(time.time() - start_time)
+                    continue
+
+            run_id = candidate_id
+            logger.info("Found run %s in state %s (elapsed: %ds)", run_id, candidate_state, elapsed)
             break
         
         # Warn if approaching timeout (80% elapsed)
