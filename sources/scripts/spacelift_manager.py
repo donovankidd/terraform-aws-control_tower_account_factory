@@ -228,7 +228,7 @@ def ensure_vcs_and_stack_exists(
                 logger.warning("Skipping binary file: %s", relative_path)
                 continue
             except OSError:
-                logger.error("Failed to read file: %s", relative_path)
+                logger.error("Failed to read file: %s", relative_path, exc_info=True)
                 raise
 
             files.append({
