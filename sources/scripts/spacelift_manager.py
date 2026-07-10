@@ -202,21 +202,50 @@ def ensure_vcs_and_stack_exists(
         spacelift.set_stack_env_vars(stack_id, env_vars)
     
     # Now commit files - this will trigger Spacelift to detect the new commit
+    # Directories that should never be committed to Spacelift VCS
+    excluded_dirs = {'.terraform', '.git', '__pycache__', '.venv', 'node_modules'}
+
     files = []
+    skipped_binary = []
     for root, dirs, filenames in os.walk(terraform_files_dir):
+        # Prune excluded directories in-place (prevents os.walk from descending)
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
+
         for filename in filenames:
             file_path = os.path.join(root, filename)
             relative_path = os.path.relpath(file_path, terraform_files_dir)
 
-            with open(file_path, 'r') as f:
-                content = f.read()
+            # Skip symlinks to prevent exfiltration of files outside the working tree
+            if os.path.islink(file_path):
+                logger.warning("Skipping symlink: %s", relative_path)
+                continue
+
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except UnicodeDecodeError:
+                skipped_binary.append(relative_path)
+                logger.warning("Skipping binary file: %s", relative_path)
+                continue
+            except OSError:
+                logger.error("Failed to read file: %s", relative_path)
+                raise
 
             files.append({
                 "path": relative_path,
                 "content": content
             })
     
+    if skipped_binary:
+        logger.info("Skipped %d binary file(s): %s", len(skipped_binary), ", ".join(skipped_binary))
+
     if not files:
+        if skipped_binary:
+            raise Exception(
+                "No readable Terraform files found in {} ({} binary file(s) skipped: {})".format(
+                    terraform_files_dir, len(skipped_binary), ", ".join(skipped_binary)
+                )
+            )
         raise Exception("No Terraform files found in {}".format(terraform_files_dir))
     
     # Log file list and calculate total size
